@@ -2,11 +2,11 @@
  * /vocab — 노션 단어장 DB 양방향 동기화
  * ------------------------------------------------------------------
  * GET  /vocab : 노션 단어장 DB 전체 조회 → 앱에 단어 목록 전달
- *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "srsLevel", "reviewCount" }] }
+ *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "level", "srsLevel", "reviewCount" }] }
  *
  * POST /vocab : 앱에서 추가한 단어를 노션 단어장 DB에 생성
- *   요청: { "records": [{ "word", "meaning", "example", "category" }] }
- *   중복 체크(단어+카테고리) 후 생성
+ *   요청: { "records": [{ "word", "meaning", "example", "category", "level" }] }
+ *   중복 체크(단어+카테고리) 후 생성. level은 한자 N5~N1 (select), 없으면 생략.
  *   응답: { "success": true, "created": N, "skipped": N, "createdIds": [...] }
  */
 const { queryWords, createWord, wordKey } = require('../lib/notion');
@@ -77,6 +77,7 @@ module.exports = async function handler(req, res) {
         meaning: r.meaning != null ? String(r.meaning) : '',
         example: r.example != null ? String(r.example) : '',
         category,
+        level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
         srsLevel: r.srsLevel != null ? Number(r.srsLevel) || 1 : 1,
         reviewCount: r.reviewCount != null ? Number(r.reviewCount) || 0 : 0,
       });
