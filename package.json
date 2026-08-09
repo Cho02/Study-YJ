@@ -1,0 +1,20 @@
+{
+  "name": "study-timer-serverless",
+  "version": "1.0.0",
+  "private": true,
+  "description": "공부 타이머/일본어 공부 어플용 Vercel 서버리스 함수 (노션 동기화 + 대시보드)",
+  "main": "api/sync.js",
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15"
+  },
+  "devDependencies": {
+    "vercel": "^37.0.0"
+  }
+}
