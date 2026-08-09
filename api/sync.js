@@ -1,17 +1,21 @@
 /**
- * POST /api/sync
+ * /api/sync — 공부 기록 동기화 + 조회
  * ------------------------------------------------------------------
- * 어플 로컬 기록(study_records)을 노션 '공부 타이머 기록' DB에 동기화한다.
+ * POST /api/sync
+ *   어플 로컬 기록(study_records)을 노션 '공부 타이머 기록' DB에 동기화한다.
+ *   요청 본문:
+ *   {
+ *     "records": [
+ *       { "date": "2026-08-09", "subject": "일본어", "minutes": 45, "source": "타이머", "memo": "N5 단어 20개" }
+ *     ]
+ *   }
+ *   중복 판단 기준: 날짜 + 과목 + 소스 조합이 이미 존재하면 skip
+ *   응답: { "success": true, "created": N, "skipped": N, "errors": [...] }
  *
- * 요청 본문:
- * {
- *   "records": [
- *     { "date": "2026-08-09", "subject": "일본어", "minutes": 45, "source": "타이머", "memo": "N5 단어 20개" }
- *   ]
- * }
- *
- * 중복 판단 기준: 날짜 + 과목 + 소스 조합이 이미 존재하면 skip
- * 응답: { "success": true, "created": N, "skipped": N, "errors": [...] }
+ * GET /api/sync
+ *   노션 '공부 타이머 기록' DB 전체 기록을 반환한다 (타이머앱 Pull용).
+ *   CORS 허용, 인증 없음 (개인용).
+ *   응답: { "success": true, "records": [{ "id", "date", "subject", "minutes", "source", "memo" }] }
  */
 const {
   queryStudyRecords,
@@ -60,14 +64,33 @@ function validateRecord(r) {
 module.exports = async function handler(req, res) {
   // CORS (어플/대시보드에서 직접 호출 가능하도록)
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
   }
+
+  // GET /api/sync — 노션 전체 기록 조회 (타이머앱 Pull, 인증 없음)
+  if (req.method === 'GET') {
+    try {
+      const records = (await queryStudyRecords()).map((r) => ({
+        id: r.id,
+        date: r.date,
+        subject: r.subject,
+        minutes: r.minutes,
+        source: r.source,
+        memo: r.memo,
+      }));
+      return res.json({ success: true, records });
+    } catch (err) {
+      console.error('[sync] GET 조회 실패:', err.message);
+      return res.status(500).json({ success: false, records: [], error: `노션 조회 실패: ${err.message}` });
+    }
+  }
+
   if (req.method !== 'POST') {
-    res.status(405).json({ success: false, error: 'POST 메서드만 허용됩니다.' });
+    res.status(405).json({ success: false, error: 'GET 또는 POST 메서드만 허용됩니다.' });
     return;
   }
 
