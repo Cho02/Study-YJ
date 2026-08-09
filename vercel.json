@@ -1,12 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 10,
-      "runtime": "nodejs@20.x"
-    }
-  },
   "rewrites": [
     { "source": "/dashboard", "destination": "/api/dashboard" },
     { "source": "/sync", "destination": "/api/sync" },
