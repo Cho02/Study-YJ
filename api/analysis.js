@@ -179,11 +179,11 @@ function callVercelPaid(prompt) {
 }
 
 // ── 프롬프트 생성 ───────────────────────────────────────────────
-function buildPrompt(stats, isRetry) {
+function buildPrompt(stats, meta, rules, isRetry) {
   const schema = [
     '{',
     '  "analysis": {',
-    '    "focus": { "score": number /* stats.focusIndex 값 그대로 */, "trend": "상승세" | "유지" | "하락세" /* stats.focusTrend 값 그대로 */, "comment": "한국어 한 문장" },',
+    '    "focus": { "score": number /* stats.focusIndex 값 그대로 */, "trend": "상승세" | "유지" | "하락세" | "insufficient_data" /* stats.focusTrend 값 그대로 */, "comment": "한국어 한 문장" },',
     '    "balance": { "subject": "비중이 가장 큰 과목", "overweight": boolean, "comment": "한국어 한 문장" },',
     '    "srs": { "stagnant": ["정체된 레벨, 없으면 빈 배열"], "backlog": number /* stats.reviewBacklog 값 그대로 */, "comment": "한국어 한 문장" },',
     '    "burnout": { "risk": "낮음" | "보통" | "높음", "comment": "한국어 한 문장" },',
@@ -191,6 +191,25 @@ function buildPrompt(stats, isRetry) {
     '  }',
     '}',
   ].join('\n');
+
+  // meta 가드 룰 — 데이터 부족/신규 사용자/복습 밀림 없음 시 진단 제한
+  const metaRules = [];
+  if (meta && meta.focusTrendValid === false) {
+    metaRules.push('focus.trend는 반드시 "insufficient_data"로 출력하세요.');
+    metaRules.push('advice에 "최근 몰입도 변화 추이를 분석하기에는 학습 기록이 더 필요합니다" 문장을 반드시 포함하세요.');
+  }
+  if (meta && meta.isNewUser === true) {
+    metaRules.push('이 사용자는 신규 사용자입니다. 과부하/번아웃/추이 진단을 하지 마세요.');
+  }
+  if (meta && meta.hasActiveBacklog === false) {
+    metaRules.push('복습 밀림이 없습니다. 복습 밀림 관련 조언을 하지 마세요.');
+  }
+
+  // 규칙 엔진 결과 — "이미 결정된 조언" (AI가 바꾸거나 생략할 수 없다)
+  const decidedAdvice = Array.isArray(rules) && rules.length > 0
+    ? rules.map((r) => r.text).join(' ')
+    : '';
+
   return [
     '당신은 공부 습관 분석가입니다. 아래 사용자의 공부 통계(JSON)를 받아 지정된 JSON 스키마에 맞춰 분석하세요.',
     '중요: AI는 계산하지 않습니다. score/backlog 등 숫자는 주어진 통계 값을 그대로 사용하고, 해석과 조언만 한국어로 작성하세요.',
@@ -201,10 +220,103 @@ function buildPrompt(stats, isRetry) {
     '사용자 공부 통계:',
     JSON.stringify(stats),
     '',
+    ...(metaRules.length > 0 ? ['규칙:', ...metaRules, ''] : []),
+    ...(decidedAdvice
+      ? ['이미 결정된 조언 (아래 내용은 이미 결정된 것입니다. advice에 반드시 그대로 포함하고, 내용을 바꾸거나 생략하지 마세요):', decidedAdvice, '']
+      : []),
     isRetry
       ? '이전 응답이 스키마에 맞지 않았습니다. 위 스키마에 정확히 맞는 JSON만 출력하세요. 다른 텍스트는 절대 출력하지 마세요.'
       : '',
   ].filter((line) => line !== '').join('\n');
+}
+
+// ── 규칙 엔진 (결정적 조언 — AI가 바꾸지 못하는 부분) ─────────────
+// 개선 4/5: 복습 밀림 / 주간 증감 / L1~L4 망각 위험(Retention Risk Score)을
+// 결정적 템플릿으로 생성하고, LLM 응답의 advice에 병합한다.
+
+/** srsDistribution에서 L1~L4 비율과 최악 카테고리 계산 */
+function computeL1L4(srsDistribution) {
+  if (!srsDistribution || typeof srsDistribution !== 'object') return { ratio: 0, worstCategory: null };
+  let total = 0;
+  let l1l4 = 0;
+  let worstCategory = null;
+  let worstRatio = -1;
+  for (const [cat, levels] of Object.entries(srsDistribution)) {
+    if (!levels || typeof levels !== 'object') continue;
+    let catTotal = 0;
+    let catL1L4 = 0;
+    for (const [level, count] of Object.entries(levels)) {
+      const n = Number(count) || 0;
+      const lv = Number(String(level).replace('L', '')) || 0;
+      catTotal += n;
+      total += n;
+      if (lv >= 1 && lv <= 4) {
+        catL1L4 += n;
+        l1l4 += n;
+      }
+    }
+    if (catTotal > 0) {
+      const r = catL1L4 / catTotal;
+      if (r > worstRatio) {
+        worstRatio = r;
+        worstCategory = cat;
+      }
+    }
+  }
+  return { ratio: total > 0 ? l1l4 / total : 0, worstCategory };
+}
+
+function runRuleEngine(stats, meta) {
+  const rules = [];
+
+  // 복습 밀림 — 50개 초과 시 분산 조언
+  const backlog = Number(stats && stats.reviewBacklog) || 0;
+  if (backlog > 50) {
+    rules.push({ key: '복습이 50개 이상', text: '복습이 50개 이상 밀렸습니다. 2~3일로 분산하세요.' });
+  }
+
+  // 주간 증감 — 이전 7일 대비 ±20% 이상 변동
+  const weeklyMinutes = Number(stats && stats.weeklyMinutes) || 0;
+  const weeklyDiff = Number(stats && stats.weeklyDiffMinutes) || 0;
+  const prevWeek = weeklyMinutes - weeklyDiff; // 이전 7일 공부 시간
+  if (prevWeek > 0) {
+    if (weeklyDiff > 0.2 * prevWeek) {
+      rules.push({ key: '20% 이상 증가', text: '지난주 대비 20% 이상 증가했습니다.' });
+    } else if (weeklyDiff < -0.2 * prevWeek) {
+      rules.push({ key: '20% 이상 감소', text: '지난주 대비 20% 이상 감소했습니다.' });
+    }
+  }
+
+  // L1~L4 망각 위험 — 신규 사용자는 모든 카드가 L1~L4라 진단 제외
+  const isNewUser = Boolean(meta && meta.isNewUser);
+  if (!isNewUser) {
+    const { ratio, worstCategory } = computeL1L4(stats && stats.srsDistribution);
+    if (ratio >= 0.6) {
+      const text = worstCategory
+        ? `새 단어를 외우는 속도보다 잊어버리는 속도가 빠릅니다. 카테고리 ${worstCategory}의 복습 주기를 당기세요.`
+        : '새 단어를 외우는 속도보다 잊어버리는 속도가 빠릅니다. 복습 주기를 당기세요.';
+      rules.push({ key: '복습 주기를 당기세요', text });
+    }
+  }
+
+  return rules;
+}
+
+/** 규칙 결과를 AI 응답 advice에 병합 — key가 advice에 없으면 앞에 추가 */
+function mergeRules(analysis, rules, meta) {
+  if (!analysis || typeof analysis.advice !== 'string') return analysis;
+  const missing = (Array.isArray(rules) ? rules : []).filter(
+    (r) => !analysis.advice.includes(r.key),
+  );
+  const parts = missing.map((r) => r.text);
+  if (meta && meta.focusTrendValid === false &&
+      !analysis.advice.includes('학습 기록이 더 필요합니다')) {
+    parts.push('최근 몰입도 변화 추이를 분석하기에는 학습 기록이 더 필요합니다.');
+  }
+  if (parts.length > 0) {
+    analysis.advice = [...parts, analysis.advice].join(' ');
+  }
+  return analysis;
 }
 
 // ── 응답 JSON 추출 + 스키마 검증 ────────────────────────────────
@@ -266,6 +378,8 @@ module.exports = async function handler(req, res) {
 
   // 입력 토큰 절감 — 앱이 보낸 요약 통계 중 화이트리스트 필드만 모델로 전달한다
   const stats = sanitizeStats(rawStats);
+  const meta = body && body.meta && typeof body.meta === 'object' ? body.meta : {};
+  const rules = runRuleEngine(stats, meta);
 
   const paidGuard = paidAllowed();
   if (!paidGuard.allowed) {
@@ -279,7 +393,7 @@ module.exports = async function handler(req, res) {
   // 스키마 재시도 1회 포함 최대 2회 시도
   let paidFallback = false;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const prompt = buildPrompt(stats, attempt === 1);
+    const prompt = buildPrompt(stats, meta, rules, attempt === 1);
 
     // 3단계 폴백 순서로 시도 — 1차 유료 Vercel Gemma, 실패 시 무료 프리티어로 폴백
     const tiers = [
@@ -310,6 +424,8 @@ module.exports = async function handler(req, res) {
 
     try {
       const analysis = validateAnalysis(extractJson(content));
+      // 규칙 엔진 결과를 AI 응답 advice에 병합 (AI가 생략/변경한 규칙 조언 보강)
+      mergeRules(analysis, rules, meta);
       return res.json({
         success: true,
         paidFallback,
