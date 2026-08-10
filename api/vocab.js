@@ -2,11 +2,11 @@
  * /vocab — 노션 단어장 DB 양방향 동기화
  * ------------------------------------------------------------------
  * GET  /vocab : 노션 단어장 DB 전체 조회 → 앱에 단어 목록 전달
- *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "level", "hiragana", "srsLevel", "reviewCount", "updatedAt" }] }
+ *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "level", "hiragana", "onyomi", "kunyomi", "srsLevel", "reviewCount", "updatedAt" }] }
  *
  * POST /vocab : 앱에서 추가한 단어를 노션 단어장 DB에 생성
- *   요청: { "records": [{ "word", "meaning", "example", "category", "level", "hiragana" }] }
- *   중복 체크(단어+카테고리) 후 생성. level은 한자 N5~N1 (select), hiragana는 일본어 단어의 읽는 법 (rich_text), 없으면 생략.
+ *   요청: { "records": [{ "word", "meaning", "example", "category", "level", "hiragana", "onyomi", "kunyomi" }] }
+ *   중복 체크(단어+카테고리) 후 생성. level은 한자 N5~N1 (select), hiragana는 일본어 단어의 읽는 법 (rich_text), onyomi/kunyomi는 한자 음독/훈독, 없으면 생략.
  *   응답: { "success": true, "created": N, "skipped": N, "createdIds": [...] }
  *
  * PUT /vocab : 앱이 최신인 단어를 노션에 반영 (충돌 해결 — 최신 수정 우선)
@@ -85,6 +85,8 @@ module.exports = async function handler(req, res) {
         level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
         hiragana: r.hiragana != null ? String(r.hiragana).trim() : null, // 일본어 단어의 읽는 법
         detail: r.detail != null ? String(r.detail).trim() : null, // 상세 설명 (한자 어원/조합 등)
+        onyomi: r.onyomi != null ? String(r.onyomi).trim() : null, // 한자 음독
+        kunyomi: r.kunyomi != null ? String(r.kunyomi).trim() : null, // 한자 훈독
         srsLevel: r.srsLevel != null ? Number(r.srsLevel) || 1 : 1,
         reviewCount: r.reviewCount != null ? Number(r.reviewCount) || 0 : 0,
       });
