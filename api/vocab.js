@@ -84,6 +84,7 @@ module.exports = async function handler(req, res) {
         category,
         level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
         hiragana: r.hiragana != null ? String(r.hiragana).trim() : null, // 일본어 단어의 읽는 법
+        detail: r.detail != null ? String(r.detail).trim() : null, // 상세 설명 (한자 어원/조합 등)
         srsLevel: r.srsLevel != null ? Number(r.srsLevel) || 1 : 1,
         reviewCount: r.reviewCount != null ? Number(r.reviewCount) || 0 : 0,
       });
@@ -173,6 +174,7 @@ module.exports = async function handler(req, res) {
           category: String(r.category || '일본어'),
           level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
           hiragana: r.hiragana != null ? String(r.hiragana).trim() : null, // 일본어 단어의 읽는 법
+          detail: r.detail != null ? String(r.detail).trim() : null, // 상세 설명 (한자 어원/조합 등)
           onyomi: r.onyomi != null ? String(r.onyomi) : '',
           kunyomi: r.kunyomi != null ? String(r.kunyomi) : '',
         });
