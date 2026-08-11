@@ -46,8 +46,9 @@ module.exports = async function handler(req, res) {
       if (!info) {
         return res.status(404).json({ success: false, error: '저장된 백업이 없습니다.' });
       }
-      const blob = await get(BACKUP_PATH, { access: 'private' });
-      const text = await blob.text();
+      const result = await get(BACKUP_PATH, { access: 'private' });
+      if (!result) return res.status(404).json({ success: false, error: '저장된 백업이 없습니다.' });
+      const text = await new Response(result.stream).text();
       let stored;
       try {
         stored = JSON.parse(text);
