@@ -59,7 +59,7 @@ async function resolveApkUrl(apkPath) {
 async function readLatest() {
   const info = await head(VERSION_PATH);
   if (!info) return null;
-  const blob = await get(VERSION_PATH);
+  const blob = await get(VERSION_PATH, { access: 'private' });
   const latest = JSON.parse(await blob.text());
   return {
     versionCode: Number(latest.versionCode) || 0,
