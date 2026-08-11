@@ -4,6 +4,7 @@
   "rewrites": [
     { "source": "/dashboard", "destination": "/api/dashboard" },
     { "source": "/sync", "destination": "/api/sync" },
-    { "source": "/vocab", "destination": "/api/vocab" }
+    { "source": "/vocab", "destination": "/api/vocab" },
+    { "source": "/reset-kanji-srs", "destination": "/api/reset-kanji-srs" }
   ]
 }
