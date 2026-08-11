@@ -133,6 +133,7 @@ module.exports = async function handler(req, res) {
     await put(VERSION_PATH, JSON.stringify(payload), {
       access: 'private',
       addRandomSuffix: false,
+      allowOverwrite: true,
       contentType: 'application/json',
     });
     const apkUrl = await resolveApkUrl(apkPath);
