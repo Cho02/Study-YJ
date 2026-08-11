@@ -10,7 +10,19 @@
  *   → {"method":"POST"} 안내 반환
  */
 const { resetKanjiSrs } = require('../lib/notion');
-const { setCors, handleOptions } = require('../lib/http');
+
+function setCors(res, methods) {
+  if (!methods) methods = 'GET, POST, OPTIONS';
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', methods);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function handleOptions(req, res) {
+  if (req.method !== 'OPTIONS') return false;
+  res.status(204).end();
+  return true;
+}
 
 const HERMES_SECRET = process.env.HERMES_SECRET;
 
