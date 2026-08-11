@@ -84,7 +84,7 @@ module.exports = async function handler(req, res) {
   try {
     // addRandomSuffix=false 로 고정 경로에 덮어쓰기 (버전별 백업이 아닌 최신 1개 유지)
     const blob = await put(BACKUP_PATH, JSON.stringify(body), {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
     });

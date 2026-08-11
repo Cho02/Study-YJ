@@ -131,7 +131,7 @@ module.exports = async function handler(req, res) {
       notes: body.notes != null ? String(body.notes) : '',
     };
     await put(VERSION_PATH, JSON.stringify(payload), {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: false,
       contentType: 'application/json',
     });
