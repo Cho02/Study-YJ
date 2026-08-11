@@ -47,7 +47,7 @@ function isAdmin(req) {
 /** Blob 에서 apkPath 의 다운로드 URL 을 조회한다. (private blob → 프록시 경로) */
 async function resolveApkUrl(apkPath) {
   if (!apkPath) return null;
-  const base = (process.env.VERCEL_URL || 'study-yj.vercel.app').replace(/^https?:\/\//, '');
+  const base = 'study-yj.vercel.app';
   return `https://${base}/download-apk?path=${encodeURIComponent(apkPath)}`;
 }
 
