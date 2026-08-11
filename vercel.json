@@ -5,6 +5,7 @@
     { "source": "/dashboard", "destination": "/api/dashboard" },
     { "source": "/sync", "destination": "/api/sync" },
     { "source": "/vocab", "destination": "/api/vocab" },
-    { "source": "/reset-kanji-srs", "destination": "/api/reset-kanji-srs" }
+    { "source": "/reset-kanji-srs", "destination": "/api/reset-kanji-srs" },
+    { "source": "/download-apk", "destination": "/api/download-apk" }
   ]
 }

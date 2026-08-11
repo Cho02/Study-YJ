@@ -15,7 +15,7 @@
  *   선택 보호: ADMIN_TOKEN env 가 설정돼 있으면 Authorization: Bearer <token> 요구.
  *   (실제 배포는 scripts/deploy-apk.js 로 APK 업로드 + 등록을 한 번에 수행)
  */
-const { put, head, get, getDownloadUrl } = require('@vercel/blob');
+const { put, head, get } = require('@vercel/blob');
 
 const VERSION_PATH = 'latest-version.json';
 
@@ -44,15 +44,11 @@ function isAdmin(req) {
   return header === `Bearer ${token}`;
 }
 
-/** Blob 에서 apkPath 의 다운로드 URL 을 조회한다. (private blob → 서명된 URL) */
+/** Blob 에서 apkPath 의 다운로드 URL 을 조회한다. (private blob → 프록시 경로) */
 async function resolveApkUrl(apkPath) {
   if (!apkPath) return null;
-  try {
-    const url = await getDownloadUrl(apkPath, { access: 'private' });
-    return url;
-  } catch (_) {
-    return null;
-  }
+  const base = (process.env.VERCEL_URL || 'study-yj.vercel.app').replace(/^https?:\/\//, '');
+  return `https://${base}/download-apk?path=${encodeURIComponent(apkPath)}`;
 }
 
 /** 최신 버전 정보를 Blob 에서 읽는다. 없으면 null. */
