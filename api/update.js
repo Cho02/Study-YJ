@@ -15,7 +15,7 @@
  *   선택 보호: ADMIN_TOKEN env 가 설정돼 있으면 Authorization: Bearer <token> 요구.
  *   (실제 배포는 scripts/deploy-apk.js 로 APK 업로드 + 등록을 한 번에 수행)
  */
-const { put, head, download } = require('@vercel/blob');
+const { put, head } = require('@vercel/blob');
 
 const VERSION_PATH = 'latest-version.json';
 
@@ -59,8 +59,8 @@ async function resolveApkUrl(apkPath) {
 async function readLatest() {
   const info = await head(VERSION_PATH);
   if (!info) return null;
-  const blob = await download(VERSION_PATH);
-  const latest = JSON.parse(await blob.text());
+  const resp = await fetch(info.url);
+  const latest = await resp.json();
   return {
     versionCode: Number(latest.versionCode) || 0,
     versionName: String(latest.versionName || ''),

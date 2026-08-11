@@ -12,7 +12,7 @@
  *   저장된 백업을 조회한다. 없으면 404.
  *   응답:     { "success": true, "records": [...], "vocab": [...], "savedAt": epochMs }
  */
-const { put, head, download } = require('@vercel/blob');
+const { put, head } = require('@vercel/blob');
 
 const BACKUP_PATH = 'backup.json';
 
@@ -46,8 +46,8 @@ module.exports = async function handler(req, res) {
       if (!info) {
         return res.status(404).json({ success: false, error: '저장된 백업이 없습니다.' });
       }
-      const blob = await download(BACKUP_PATH);
-      const text = await blob.text();
+      const resp = await fetch(info.url);
+      const text = await resp.text();
       let stored;
       try {
         stored = JSON.parse(text);
