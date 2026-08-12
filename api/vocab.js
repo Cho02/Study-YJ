@@ -2,17 +2,12 @@
  * /vocab — 노션 단어장 DB 양방향 동기화
  * ------------------------------------------------------------------
  * GET  /vocab : 노션 단어장 DB 전체 조회 → 앱에 단어 목록 전달
- *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "level", "hiragana", "onyomi", "kunyomi", "srsLevel", "reviewCount", "updatedAt" }] }
+ *   응답: { "success": true, "words": [{ "id", "word", "meaning", "example", "category", "level", "onyomi", "kunyomi", "srsLevel", "reviewCount" }] }
  *
  * POST /vocab : 앱에서 추가한 단어를 노션 단어장 DB에 생성
- *   요청: { "records": [{ "word", "meaning", "example", "category", "level", "hiragana", "onyomi", "kunyomi" }] }
- *   중복 체크(단어+카테고리) 후 생성. level은 한자 N5~N1 (select), hiragana는 일본어 단어의 읽는 법 (rich_text), onyomi/kunyomi는 한자 음독/훈독, 없으면 생략.
+ *   요청: { "records": [{ "word", "meaning", "example", "category", "level", "onyomi", "kunyomi" }] }
+ *   중복 체크(단어+카테고리) 후 생성. level은 한자 N5~N1 (select), 없으면 생략.
  *   응답: { "success": true, "created": N, "skipped": N, "createdIds": [...] }
- *
- * PUT /vocab : 앱이 최신인 단어를 노션에 반영 (충돌 해결 — 최신 수정 우선)
- *   요청: { "records": [{ "id", "word", "meaning", "example", "category", "level", "hiragana", "onyomi", "kunyomi", "updatedAt" }] }
- *   record.updatedAt > 노션 페이지 last_edited_time일 때만 갱신, 아니면 skipped.
- *   응답: { "success": true, "updated": N, "skipped": N, "errors": [...] }
  */
 const { queryWords, createWord, updateWord, wordKey } = require('../lib/notion');
 
@@ -83,12 +78,11 @@ module.exports = async function handler(req, res) {
         example: r.example != null ? String(r.example) : '',
         category,
         level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
-        hiragana: r.hiragana != null ? String(r.hiragana).trim() : null, // 일본어 단어의 읽는 법
-        detail: r.detail != null ? String(r.detail).trim() : null, // 상세 설명 (한자 어원/조합 등)
-        onyomi: r.onyomi != null ? String(r.onyomi).trim() : null, // 한자 음독
-        kunyomi: r.kunyomi != null ? String(r.kunyomi).trim() : null, // 한자 훈독
+        onyomi: r.onyomi != null ? String(r.onyomi) : '', // 음독
+        kunyomi: r.kunyomi != null ? String(r.kunyomi) : '', // 훈독
         srsLevel: r.srsLevel != null ? Number(r.srsLevel) || 1 : 1,
         reviewCount: r.reviewCount != null ? Number(r.reviewCount) || 0 : 0,
+        srs: r.srs != null ? r.srs : null, // FSRS 3중 상태
       });
     });
 
@@ -138,57 +132,37 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ success: false, error: `한 번에 ${MAX_RECORDS}개 이하만 전송할 수 있습니다.` });
     }
 
-    // id → 노션 페이지 수정시각(updatedAt) 맵 구성 — 충돌 해결(최신 수정 우선) 기준
-    let existing;
-    try {
-      existing = await queryWords();
-    } catch (err) {
-      console.error('[vocab] 갱신용 조회 실패:', err.message);
-      return res.status(500).json({ success: false, error: `노션 조회 실패: ${err.message}` });
-    }
-    const pageUpdatedAt = new Map(existing.map((w) => [w.id, w.updatedAt]));
-
     let updated = 0;
     let skipped = 0;
     const errors = [];
     for (const r of rawRecords) {
-      const id = String(r.id || '').trim();
-      if (!id) {
-        errors.push({ message: 'id가 비어 있습니다.' });
-        continue;
-      }
-      const remoteUpdatedAt = pageUpdatedAt.get(id);
-      if (remoteUpdatedAt == null) {
-        errors.push({ id, message: '노션에서 페이지를 찾을 수 없습니다.' });
-        continue;
-      }
-      const recordUpdatedAt = Number(r.updatedAt) || 0;
-      // 앱이 최신일 때만 갱신 — 같거나 노션이 최신이면 건너뜀 (no-op)
-      if (recordUpdatedAt <= remoteUpdatedAt) {
+      if (!r.id) {
+        errors.push({ word: r.word || '(unknown)', message: 'id 필드가 없습니다.' });
         skipped += 1;
         continue;
       }
       try {
-        await updateWord(id, {
-          word: String(r.word || ''),
+        await updateWord(r.id, {
+          word: r.word,
           meaning: r.meaning != null ? String(r.meaning) : '',
           example: r.example != null ? String(r.example) : '',
-          category: String(r.category || '일본어'),
-          level: r.level != null ? String(r.level).trim() : null, // 한자 N5~N1
-          hiragana: r.hiragana != null ? String(r.hiragana).trim() : null, // 일본어 단어의 읽는 법
-          detail: r.detail != null ? String(r.detail).trim() : null, // 상세 설명 (한자 어원/조합 등)
+          category: String(r.category || '일본어').trim(),
+          level: r.level != null ? String(r.level).trim() : null,
           onyomi: r.onyomi != null ? String(r.onyomi) : '',
           kunyomi: r.kunyomi != null ? String(r.kunyomi) : '',
+          srsLevel: r.srsLevel != null ? Number(r.srsLevel) || 1 : 1,
+          reviewCount: r.reviewCount != null ? Number(r.reviewCount) || 0 : 0,
+          srs: r.srs || null,
         });
         updated += 1;
       } catch (err) {
-        console.error('[vocab] 갱신 실패:', id, err.message);
-        errors.push({ id, message: err.message });
+        console.error('[vocab] 업데이트 실패:', r.word, err.message);
+        errors.push({ word: r.word || '(unknown)', message: err.message });
       }
     }
 
     return res.json({ success: true, updated, skipped, errors });
   }
 
-  res.status(405).json({ success: false, error: 'GET, POST 또는 PUT만 허용됩니다.' });
+  res.status(405).json({ success: false, error: 'GET, POST, PUT만 허용됩니다.' });
 };
